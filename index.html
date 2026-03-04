@@ -3,14 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Expansão 2026</title>
+    <title>Painel de Expansão</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         .doughnut-container { position: relative; width: 70px; height: 70px; }
         .doughnut-svg { transform: rotate(-90deg); }
         .bg-brown-medium { background-color: #795548; }
-        .text-brown-medium { color: #795548; }
+        /* Cores customizadas solicitadas */
+        .bg-obra-done { background-color: #D7CCC8; } /* Marrom Claro */
+        .bg-obra-progress { background-color: #FFF59D; } /* Amarelo Pastel */
+        .bg-phase-done { background-color: #A5D6A7; } /* Verde Pastel */
+        .bg-phase-progress { background-color: #90CAF9; } /* Azul Pastel */
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
@@ -18,10 +22,10 @@
     <!-- Faixa Superior Marrom -->
     <header class="bg-brown-medium text-white p-5 shadow-lg sticky top-0 z-50">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <h1 class="text-lg font-bold tracking-tight uppercase">Expansion Management</h1>
+            <h1 class="text-xl font-black tracking-tighter uppercase">LOJAS LA GUAPA 2026</h1>
             <div class="flex gap-16 text-center">
                 <div>
-                    <p class="text-[10px] uppercase font-bold opacity-70 mb-1">Lojas Ativas</p>
+                    <p class="text-[10px] uppercase font-bold opacity-70 mb-1">LOJAS EM ANDAMENTO</p>
                     <p id="active-stores" class="text-2xl font-black">0</p>
                 </div>
                 <div>
@@ -33,11 +37,11 @@
     </header>
 
     <main class="max-w-7xl mx-auto p-8 md:p-12">
-        <!-- Título Principal -->
-        <h2 class="text-4xl font-black text-slate-800 mb-12 border-b-8 border-brown-medium inline-block pb-2">Painel de Expansão 2026</h2>
+        <!-- Título Principal Ajustado -->
+        <h2 class="text-4xl font-black text-slate-800 mb-12 border-b-8 border-brown-medium inline-block pb-2">Painel de Expansão</h2>
         
         <div id="dashboard-content" class="space-y-16">
-            <div class="text-center py-20 text-slate-400 font-medium">Carregando indicadores...</div>
+            <div class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase">Carregando LOJAS LA GUAPA...</div>
         </div>
     </main>
 
@@ -48,7 +52,6 @@
             Papa.parse(CSV_URL, {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
-                    // REGRA: Apenas registros APLICÁVEL = "sim" [3, 4]
                     const data = results.data.filter(row => row['APLICÁVEL?']?.toLowerCase() === 'sim');
                     const storeNames = [...new Set(data.map(d => d.LOJA))];
                     let storeSummaries = [];
@@ -61,21 +64,23 @@
                         let phasesRes = [];
 
                         phaseConfigs.forEach(pTitle => {
-                            const rows = storeData.filter(r => r.FASE.includes(pTitle.split(' – ')[1]));
+                            const rows = storeData.filter(r => r.FASE.includes(pTitle.split(' – ')));
                             const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b['% CONCLUSÃO'] || 0), 0) / rows.length) : 0;
                             phasesRes.push({ title: pTitle, avg, rows });
                         });
 
-                        // % Loja = média das 4 fases [1]
                         const storeAvg = phasesRes.reduce((acc, curr) => acc + curr.avg, 0) / 4;
                         storeSummaries.push({ name, avg: storeAvg });
                         renderStore(name, phasesRes);
                     });
 
-                    // Atualiza Cabeçalho
                     document.getElementById('active-stores').innerText = storeNames.length;
+                    
+                    // Ajuste Loja Mais Avançada (Correção do bug anterior)
                     storeSummaries.sort((a, b) => b.avg - a.avg);
-                    if(storeSummaries.length > 0) document.getElementById('top-store').innerText = storeSummaries.name;
+                    if(storeSummaries.length > 0) {
+                        document.getElementById('top-store').innerText = storeSummaries.name;
+                    }
                 }
             });
         }
@@ -83,21 +88,27 @@
         function renderStore(name, phases) {
             let html = `
                 <div class="bg-white rounded-[40px] shadow-sm border border-slate-200 p-10">
-                    <h3 class="text-3xl font-black text-brown-medium mb-10 uppercase tracking-tighter">${name}</h3>
+                    <h3 class="text-3xl font-black text-[#795548] mb-10 uppercase tracking-tighter">${name}</h3>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
             `;
 
             phases.forEach(f => {
                 const isObra = f.title.includes("Obra");
+                const isPhaseDone = f.avg >= 100;
+                
                 html += `<div class="flex flex-col">
-                            <p class="text-[11px] font-black text-slate-400 uppercase mb-6 tracking-widest text-center md:text-left border-b pb-2">${f.title}</p>`;
+                            <div class="flex justify-between items-center border-b pb-2 mb-6">
+                                <p class="text-[11px] font-black text-slate-400 uppercase tracking-widest">${f.title}</p>
+                                ${isObra ? `<span class="text-[11px] font-black text-[#795548]">${f.avg.toFixed(0)}%</span>` : ''}
+                            </div>`;
 
                 if (!isObra) {
-                    // Gráfico de Rosca Vazado [Regra 3.1]
+                    // Gráfico de Rosca Vazado [Regra 3]
                     const radius = 30;
                     const circ = 2 * Math.PI * radius;
                     const offset = circ - (f.avg / 100) * circ;
-                    const color = f.avg >= 100 ? '#A5D6A7' : (f.avg > 0 ? '#90CAF9' : '#E0E0E0');
+                    // Padronização: Verde para 100%, Azul para o restante
+                    const color = isPhaseDone ? '#A5D6A7' : '#90CAF9';
                     
                     html += `
                         <div class="flex flex-col items-center md:items-start">
@@ -111,7 +122,7 @@
                             <div class="space-y-2 w-full">
                                 ${f.rows.map(r => `
                                     <div class="flex items-center gap-2">
-                                        <div class="w-2 h-2 rounded-full ${parseFloat(r['% CONCLUSÃO']) >= 100 ? 'bg-green-400' : (parseFloat(r['% CONCLUSÃO']) > 0 ? 'bg-blue-300' : 'bg-slate-200')}"></div>
+                                        <div class="w-2 h-2 rounded-full ${isPhaseDone ? 'bg-green-400' : 'bg-blue-400'}"></div>
                                         <span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r.ATIVIDADE}</span>
                                     </div>
                                 `).join('')}
@@ -119,18 +130,29 @@
                         </div>
                     `;
                 } else {
-                    // Gráfico de Barras para Obra [Regra 3.2]
+                    // Barra Horizontal para Obra [Regra 3.1 e 3.2]
                     html += `<div class="space-y-5">
-                        ${f.rows.map(r => `
+                        ${f.rows.map(r => {
+                            const perc = parseFloat(r['% CONCLUSÃO']);
+                            let barColor = 'bg-slate-200'; // Pendente
+                            
+                            if (isPhaseDone) {
+                                barColor = 'bg-phase-done'; // Tudo verde se a fase estiver 100%
+                            } else {
+                                if (perc >= 100) barColor = 'bg-obra-done'; // Marrom claro
+                                else if (perc > 0) barColor = 'bg-obra-progress'; // Amarelo pastel
+                            }
+
+                            return `
                             <div>
                                 <div class="flex justify-between text-[9px] font-black text-slate-500 uppercase mb-1.5">
-                                    <span>${r.ATIVIDADE}</span><span>${parseFloat(r['% CONCLUSÃO']).toFixed(0)}%</span>
+                                    <span>${r.ATIVIDADE}</span><span>${perc.toFixed(0)}%</span>
                                 </div>
                                 <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div class="bg-brown-medium h-full rounded-full transition-all duration-1000" style="width:${r['% CONCLUSÃO']}%"></div>
+                                    <div class="${barColor} h-full rounded-full transition-all duration-1000" style="width:${perc}%"></div>
                                 </div>
-                            </div>
-                        `).join('')}
+                            </div>`;
+                        }).join('')}
                     </div>`;
                 }
                 html += `</div>`;

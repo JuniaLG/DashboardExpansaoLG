@@ -10,10 +10,10 @@
         .doughnut-container { position: relative; width: 70px; height: 70px; }
         .doughnut-svg { transform: rotate(-90deg); }
         .bg-brown-medium { background-color: #795548; }
-        .bg-obra-done { background-color: #D7CCC8; } 
-        .bg-obra-progress { background-color: #FFF59D; } 
-        .bg-phase-done { background-color: #A5D6A7; } 
-        .bg-phase-progress { background-color: #90CAF9; } 
+        .bg-obra-done { background-color: #D7CCC8; } /* Marrom Claro */
+        .bg-obra-progress { background-color: #FFF59D; } /* Amarelo Pastel */
+        .bg-phase-done { background-color: #A5D6A7; } /* Verde Pastel */
+        .bg-phase-progress { background-color: #90CAF9; } /* Azul Pastel */
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
@@ -37,7 +37,7 @@
     <main class="max-w-7xl mx-auto p-8 md:p-12">
         <h2 class="text-4xl font-black text-slate-800 mb-12 border-b-8 border-brown-medium inline-block pb-2">Painel de Expansão</h2>
         <div id="dashboard-content" class="space-y-16">
-            <div class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase">Carregando Informações...</div>
+            <div id="loading-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Conectando à base de dados...</div>
         </div>
     </main>
 
@@ -48,10 +48,19 @@
             Papa.parse(CSV_URL, {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
-                    const data = results.data.filter(row => row['APLICÁVEL?']?.trim().toLowerCase() === 'sim');
+                    // Filtra apenas o que é aplicável
+                    const data = results.data.filter(row => {
+                        const aplicavel = row['APLICÁVEL?'] || row['APLICAVEL?'] || "";
+                        return aplicavel.trim().toLowerCase() === 'sim';
+                    });
+
+                    if (data.length === 0) {
+                        document.getElementById('loading-msg').innerText = "Nenhum dado encontrado. Verifique se a planilha está publicada corretamente.";
+                        return;
+                    }
+
                     const storeNames = [...new Set(data.map(d => d.LOJA))];
                     let storeSummaries = [];
-
                     document.getElementById('dashboard-content').innerHTML = '';
 
                     storeNames.forEach(name => {
@@ -65,7 +74,8 @@
                         let phasesRes = [];
 
                         phaseConfigs.forEach(conf => {
-                            const rows = storeData.filter(r => r.FASE.trim() === conf.search);
+                            // Busca flexível: verifica se o texto da fase contém o termo de busca
+                            const rows = storeData.filter(r => r.FASE.includes(conf.search));
                             const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b['% CONCLUSÃO'] || 0), 0) / rows.length) : 0;
                             phasesRes.push({ title: conf.display, avg, rows });
                         });
@@ -76,26 +86,27 @@
                     });
 
                     document.getElementById('active-stores').innerText = storeNames.length;
-                    
                     storeSummaries.sort((a, b) => b.avg - a.avg);
+                    
+                    // CORREÇÃO DO RANKING: Agora pega o primeiro item da lista
                     if(storeSummaries.length > 0) {
                         document.getElementById('top-store').innerText = storeSummaries.name;
                     }
+                },
+                error: function() {
+                    document.getElementById('loading-msg').innerText = "Erro ao carregar a planilha. Verifique o link.";
                 }
             });
         }
 
         function renderStore(name, phases) {
-            let html = `
-                <div class="bg-white rounded-[40px] shadow-sm border border-slate-200 p-10">
-                    <h3 class="text-3xl font-black text-[#795548] mb-10 uppercase tracking-tighter">${name}</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
-            `;
+            let html = `<div class="bg-white rounded-[40px] shadow-sm border border-slate-200 p-10">
+                            <h3 class="text-3xl font-black text-[#795548] mb-10 uppercase tracking-tighter">${name}</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">`;
 
             phases.forEach(f => {
                 const isObra = f.title.includes("Obra");
                 const isPhaseDone = f.avg >= 100;
-                
                 html += `<div class="flex flex-col">
                             <div class="flex justify-between items-center border-b pb-2 mb-6">
                                 <p class="text-[11px] font-black text-slate-400 uppercase tracking-widest">${f.title}</p>
@@ -103,50 +114,25 @@
                             </div>`;
 
                 if (!isObra) {
-                    const radius = 30;
-                    const circ = 2 * Math.PI * radius;
-                    const offset = circ - (f.avg / 100) * circ;
+                    const radius = 30, circ = 2 * Math.PI * radius, offset = circ - (f.avg / 100) * circ;
                     const color = isPhaseDone ? '#A5D6A7' : '#90CAF9';
-                    
-                    html += `
-                        <div class="flex flex-col items-center md:items-start">
-                            <div class="doughnut-container mb-6">
-                                <svg class="doughnut-svg w-20 h-20">
-                                    <circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="#F1F5F9" stroke-width="10"/>
-                                    <circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="${color}" 
-                                            stroke-width="10" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
-                                </svg>
-                            </div>
-                            <div class="space-y-2 w-full">
-                                ${f.rows.map(r => `
-                                    <div class="flex items-center gap-2">
-                                        <div class="w-2 h-2 rounded-full ${isPhaseDone ? 'bg-green-400' : 'bg-blue-400'}"></div>
-                                        <span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r.ATIVIDADE}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    html += `<div class="space-y-5">
-                        ${f.rows.map(r => {
-                            const perc = parseFloat(r['% CONCLUSÃO']);
-                            let barColor = 'bg-slate-200';
-                            if (isPhaseDone) barColor = 'bg-phase-done';
-                            else if (perc >= 100) barColor = 'bg-obra-done';
-                            else if (perc > 0) barColor = 'bg-obra-progress';
-
-                            return `
-                            <div>
-                                <div class="flex justify-between text-[9px] font-black text-slate-500 uppercase mb-1.5">
-                                    <span>${r.ATIVIDADE}</span><span>${perc.toFixed(0)}%</span>
+                    html += `<div class="flex flex-col items-center md:items-start">
+                                <div class="doughnut-container mb-6">
+                                    <svg class="doughnut-svg w-20 h-20"><circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="#F1F5F9" stroke-width="10"/><circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="${color}" stroke-width="10" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/></svg>
                                 </div>
-                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div class="${barColor} h-full rounded-full transition-all duration-1000" style="width:${perc}%"></div>
+                                <div class="space-y-2 w-full">
+                                    ${f.rows.map(r => `<div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full ${isPhaseDone ? 'bg-green-400' : 'bg-blue-400'}"></div><span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r.ATIVIDADE}</span></div>`).join('')}
                                 </div>
                             </div>`;
-                        }).join('')}
-                    </div>`;
+                } else {
+                    html += `<div class="space-y-5">${f.rows.map(r => {
+                        const perc = parseFloat(r['% CONCLUSÃO'] || 0);
+                        let barColor = 'bg-slate-200';
+                        if (isPhaseDone) barColor = 'bg-phase-done';
+                        else if (perc >= 100) barColor = 'bg-obra-done';
+                        else if (perc > 0) barColor = 'bg-obra-progress';
+                        return `<div><div class="flex justify-between text-[9px] font-black text-slate-500 uppercase mb-1.5"><span>${r.ATIVIDADE}</span><span>${perc.toFixed(0)}%</span></div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div class="${barColor} h-full rounded-full transition-all duration-1000" style="width:${perc}%"></div></div></div>`;
+                    }).join('')}</div>`;
                 }
                 html += `</div>`;
             });

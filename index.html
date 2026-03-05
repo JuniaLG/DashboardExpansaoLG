@@ -36,7 +36,7 @@
     <main class="max-w-7xl mx-auto p-8 md:p-12">
         <h2 class="text-4xl font-black text-slate-800 mb-12 border-b-8 border-brown-medium inline-block pb-2">Painel de Expansão</h2>
         <div id="dashboard-content" class="space-y-16">
-            <div id="status-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Conectando aos dados executivos...</div>
+            <div id="status-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Lendo base de dados...</div>
         </div>
     </main>
 
@@ -47,21 +47,30 @@
             Papa.parse(CSV_URL, {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
-                    const headers = results.meta.fields;
-                    // Função para encontrar colunas ignorando acentos e símbolos
-                    const getCol = (key) => headers.find(h => h.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(key.toUpperCase()));
-                    
-                    const colLoja = getCol("LOJA");
-                    const colFase = getCol("FASE");
-                    const colAtiv = getCol("ATIVIDADE");
-                    const colPerc = getCol("CONCLU");
-                    const colAplic = getCol("APLIC");
+                    const rows = results.data;
+                    if (!rows || rows.length === 0) {
+                        document.getElementById('status-msg').innerHTML = "ERRO: O arquivo CSV está vazio. Verifique a publicação da aba correta.";
+                        return;
+                    }
 
-                    // Filtra apenas o que é aplicável (sim)
-                    const data = results.data.filter(row => row[colAplic]?.trim().toLowerCase() === 'sim');
+                    // Identifica colunas dinamicamente para evitar erros de acento ou símbolos
+                    const headers = Object.keys(rows);
+                    const findCol = (terms) => headers.find(h => terms.some(t => h.toUpperCase().includes(t)));
+                    
+                    const colLoja = findCol(["LOJA"]);
+                    const colFase = findCol(["FASE"]);
+                    const colAtiv = findCol(["ATIVIDADE"]);
+                    const colPerc = findCol(["CONCLU", "PERCENTUAL"]);
+                    const colAplic = findCol(["APLIC", "SIM"]);
+
+                    // Filtro inteligente: Se não achar a coluna 'Aplicável', tenta achar qualquer coluna que contenha 'sim'
+                    const data = rows.filter(row => {
+                        if (colAplic) return row[colAplic]?.trim().toLowerCase() === 'sim';
+                        return Object.values(row).some(val => val?.trim().toLowerCase() === 'sim');
+                    });
 
                     if (data.length === 0) {
-                        document.getElementById('status-msg').innerHTML = "ERRO: O arquivo foi lido, mas as linhas com 'sim' não foram identificadas.";
+                        document.getElementById('status-msg').innerHTML = "CONEXÃO OK, MAS NENHUMA LINHA COM 'SIM' FOI ENCONTRADA.<br><small>Headers detectados: " + headers.join(", ") + "</small>";
                         return;
                     }
 
@@ -80,9 +89,9 @@
                         let phasesRes = [];
 
                         phaseConfigs.forEach(conf => {
-                            const rows = storeData.filter(r => r[colFase].toUpperCase().normalize("NFD").includes(conf.search));
-                            const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b[colPerc]?.replace(',','.') || 0), 0) / rows.length) : 0;
-                            phasesRes.push({ title: conf.display, avg, rows, colAtiv, colPerc });
+                            const pRows = storeData.filter(r => r[colFase]?.toUpperCase().normalize("NFD").includes(conf.search));
+                            const avg = pRows.length > 0 ? (pRows.reduce((a, b) => a + parseFloat(b[colPerc]?.replace(',','.') || 0), 0) / pRows.length) : 0;
+                            phasesRes.push({ title: conf.display, avg, rows: pRows, colAtiv, colPerc });
                         });
 
                         const storeAvg = phasesRes.reduce((acc, curr) => acc + curr.avg, 0) / 4;

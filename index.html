@@ -10,14 +10,13 @@
         .doughnut-container { position: relative; width: 70px; height: 70px; }
         .doughnut-svg { transform: rotate(-90deg); }
         .bg-brown-medium { background-color: #795548; }
-        .bg-obra-done { background-color: #D7CCC8; } /* Marrom Claro */
-        .bg-obra-progress { background-color: #FFF59D; } /* Amarelo Pastel */
-        .bg-phase-done { background-color: #A5D6A7; } /* Verde Pastel */
-        .bg-phase-progress { background-color: #90CAF9; } /* Azul Pastel */
+        .bg-obra-done { background-color: #D7CCC8; } 
+        .bg-obra-progress { background-color: #FFF59D; } 
+        .bg-phase-done { background-color: #A5D6A7; } 
+        .bg-phase-progress { background-color: #90CAF9; } 
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
-
     <header class="bg-brown-medium text-white p-5 shadow-lg sticky top-0 z-50">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <h1 class="text-xl font-black tracking-tighter uppercase">LOJAS LA GUAPA 2026</h1>
@@ -37,7 +36,7 @@
     <main class="max-w-7xl mx-auto p-8 md:p-12">
         <h2 class="text-4xl font-black text-slate-800 mb-12 border-b-8 border-brown-medium inline-block pb-2">Painel de Expansão</h2>
         <div id="dashboard-content" class="space-y-16">
-            <div id="loading-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Conectando à base de dados...</div>
+            <div id="status-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Conectando à base de dados...</div>
         </div>
     </main>
 
@@ -48,36 +47,43 @@
             Papa.parse(CSV_URL, {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
-                    // Filtra apenas o que é aplicável
-                    const data = results.data.filter(row => {
-                        const aplicavel = row['APLICÁVEL?'] || row['APLICAVEL?'] || "";
-                        return aplicavel.trim().toLowerCase() === 'sim';
-                    });
+                    const headers = Object.keys(results.data);
+                    
+                    // Função para achar coluna por palavra-chave (evita erro de acento/símbolo)
+                    const getCol = (key) => headers.find(h => h.toUpperCase().includes(key.toUpperCase()));
+                    
+                    const colLoja = getCol("LOJA");
+                    const colFase = getCol("FASE");
+                    const colAtiv = getCol("ATIVIDADE");
+                    const colPerc = getCol("CONCLU"); // Pega "% CONCLUSÃO"
+                    const colAplic = getCol("APLIC"); // Pega "APLICÁVEL?"
+
+                    // Filtra os dados de forma flexível
+                    const data = results.data.filter(row => row[colAplic]?.trim().toLowerCase() === 'sim');
 
                     if (data.length === 0) {
-                        document.getElementById('loading-msg').innerText = "Nenhum dado encontrado. Verifique se a planilha está publicada corretamente.";
+                        document.getElementById('status-msg').innerHTML = "A conexão funcionou, mas não encontrei linhas com 'sim' na coluna APLICÁVEL.";
                         return;
                     }
 
-                    const storeNames = [...new Set(data.map(d => d.LOJA))];
+                    const storeNames = [...new Set(data.map(d => d[colLoja]))];
                     let storeSummaries = [];
                     document.getElementById('dashboard-content').innerHTML = '';
 
                     storeNames.forEach(name => {
-                        const storeData = data.filter(d => d.LOJA === name);
+                        const storeData = data.filter(d => d[colLoja] === name);
                         const phaseConfigs = [
-                            { display: "1 – Pré obra", search: "Pré obra" },
-                            { display: "2 – Projeto", search: "Projeto" },
-                            { display: "3 – Obra", search: "Obra" },
-                            { display: "4 – Pós obra", search: "Pós obra" }
+                            { display: "1 – Pré obra", search: "PRÉ" },
+                            { display: "2 – Projeto", search: "PROJ" },
+                            { display: "3 – Obra", search: "OBRA" },
+                            { display: "4 – Pós obra", search: "PÓS" }
                         ];
                         let phasesRes = [];
 
                         phaseConfigs.forEach(conf => {
-                            // Busca flexível: verifica se o texto da fase contém o termo de busca
-                            const rows = storeData.filter(r => r.FASE.includes(conf.search));
-                            const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b['% CONCLUSÃO'] || 0), 0) / rows.length) : 0;
-                            phasesRes.push({ title: conf.display, avg, rows });
+                            const rows = storeData.filter(r => r[colFase].toUpperCase().includes(conf.search));
+                            const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b[colPerc] || 0), 0) / rows.length) : 0;
+                            phasesRes.push({ title: conf.display, avg, rows, colAtiv, colPerc });
                         });
 
                         const storeAvg = phasesRes.reduce((acc, curr) => acc + curr.avg, 0) / 4;
@@ -87,14 +93,7 @@
 
                     document.getElementById('active-stores').innerText = storeNames.length;
                     storeSummaries.sort((a, b) => b.avg - a.avg);
-                    
-                    // CORREÇÃO DO RANKING: Agora pega o primeiro item da lista
-                    if(storeSummaries.length > 0) {
-                        document.getElementById('top-store').innerText = storeSummaries.name;
-                    }
-                },
-                error: function() {
-                    document.getElementById('loading-msg').innerText = "Erro ao carregar a planilha. Verifique o link.";
+                    if(storeSummaries.length > 0) document.getElementById('top-store').innerText = storeSummaries.name;
                 }
             });
         }
@@ -121,17 +120,17 @@
                                     <svg class="doughnut-svg w-20 h-20"><circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="#F1F5F9" stroke-width="10"/><circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="${color}" stroke-width="10" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/></svg>
                                 </div>
                                 <div class="space-y-2 w-full">
-                                    ${f.rows.map(r => `<div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full ${isPhaseDone ? 'bg-green-400' : 'bg-blue-400'}"></div><span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r.ATIVIDADE}</span></div>`).join('')}
+                                    ${f.rows.map(r => `<div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full ${isPhaseDone ? 'bg-green-400' : 'bg-blue-400'}"></div><span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r[f.colAtiv]}</span></div>`).join('')}
                                 </div>
                             </div>`;
                 } else {
                     html += `<div class="space-y-5">${f.rows.map(r => {
-                        const perc = parseFloat(r['% CONCLUSÃO'] || 0);
+                        const perc = parseFloat(r[f.colPerc] || 0);
                         let barColor = 'bg-slate-200';
                         if (isPhaseDone) barColor = 'bg-phase-done';
                         else if (perc >= 100) barColor = 'bg-obra-done';
                         else if (perc > 0) barColor = 'bg-obra-progress';
-                        return `<div><div class="flex justify-between text-[9px] font-black text-slate-500 uppercase mb-1.5"><span>${r.ATIVIDADE}</span><span>${perc.toFixed(0)}%</span></div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div class="${barColor} h-full rounded-full transition-all duration-1000" style="width:${perc}%"></div></div></div>`;
+                        return `<div><div class="flex justify-between text-[9px] font-black text-slate-500 uppercase mb-1.5"><span>${r[f.colAtiv]}</span><span>${perc.toFixed(0)}%</span></div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div class="${barColor} h-full rounded-full transition-all duration-1000" style="width:${perc}%"></div></div></div>`;
                     }).join('')}</div>`;
                 }
                 html += `</div>`;

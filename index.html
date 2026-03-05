@@ -36,7 +36,7 @@
     <main class="max-w-7xl mx-auto p-8 md:p-12">
         <h2 class="text-4xl font-black text-slate-800 mb-12 border-b-8 border-brown-medium inline-block pb-2">Painel de Expansão</h2>
         <div id="dashboard-content" class="space-y-16">
-            <div id="status-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Conectando à base de dados...</div>
+            <div id="status-msg" class="text-center py-20 text-slate-400 font-medium tracking-widest uppercase italic">Conectando aos dados executivos...</div>
         </div>
     </main>
 
@@ -47,22 +47,21 @@
             Papa.parse(CSV_URL, {
                 download: true, header: true, skipEmptyLines: true,
                 complete: function(results) {
-                    const headers = Object.keys(results.data);
-                    
-                    // Função para achar coluna por palavra-chave (evita erro de acento/símbolo)
-                    const getCol = (key) => headers.find(h => h.toUpperCase().includes(key.toUpperCase()));
+                    const headers = results.meta.fields;
+                    // Função para encontrar colunas ignorando acentos e símbolos
+                    const getCol = (key) => headers.find(h => h.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(key.toUpperCase()));
                     
                     const colLoja = getCol("LOJA");
                     const colFase = getCol("FASE");
                     const colAtiv = getCol("ATIVIDADE");
-                    const colPerc = getCol("CONCLU"); // Pega "% CONCLUSÃO"
-                    const colAplic = getCol("APLIC"); // Pega "APLICÁVEL?"
+                    const colPerc = getCol("CONCLU");
+                    const colAplic = getCol("APLIC");
 
-                    // Filtra os dados de forma flexível
+                    // Filtra apenas o que é aplicável (sim)
                     const data = results.data.filter(row => row[colAplic]?.trim().toLowerCase() === 'sim');
 
                     if (data.length === 0) {
-                        document.getElementById('status-msg').innerHTML = "A conexão funcionou, mas não encontrei linhas com 'sim' na coluna APLICÁVEL.";
+                        document.getElementById('status-msg').innerHTML = "ERRO: O arquivo foi lido, mas as linhas com 'sim' não foram identificadas.";
                         return;
                     }
 
@@ -73,16 +72,16 @@
                     storeNames.forEach(name => {
                         const storeData = data.filter(d => d[colLoja] === name);
                         const phaseConfigs = [
-                            { display: "1 – Pré obra", search: "PRÉ" },
+                            { display: "1 – Pré obra", search: "PRE" },
                             { display: "2 – Projeto", search: "PROJ" },
                             { display: "3 – Obra", search: "OBRA" },
-                            { display: "4 – Pós obra", search: "PÓS" }
+                            { display: "4 – Pós obra", search: "POS" }
                         ];
                         let phasesRes = [];
 
                         phaseConfigs.forEach(conf => {
-                            const rows = storeData.filter(r => r[colFase].toUpperCase().includes(conf.search));
-                            const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b[colPerc] || 0), 0) / rows.length) : 0;
+                            const rows = storeData.filter(r => r[colFase].toUpperCase().normalize("NFD").includes(conf.search));
+                            const avg = rows.length > 0 ? (rows.reduce((a, b) => a + parseFloat(b[colPerc]?.replace(',','.') || 0), 0) / rows.length) : 0;
                             phasesRes.push({ title: conf.display, avg, rows, colAtiv, colPerc });
                         });
 
@@ -113,19 +112,22 @@
                             </div>`;
 
                 if (!isObra) {
-                    const radius = 30, circ = 2 * Math.PI * radius, offset = circ - (f.avg / 100) * circ;
+                    const radius = 30, circ = 2 * Math.PI * radius, offset = circ - (Math.min(f.avg, 100) / 100) * circ;
                     const color = isPhaseDone ? '#A5D6A7' : '#90CAF9';
                     html += `<div class="flex flex-col items-center md:items-start">
                                 <div class="doughnut-container mb-6">
                                     <svg class="doughnut-svg w-20 h-20"><circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="#F1F5F9" stroke-width="10"/><circle cx="40" cy="40" r="${radius}" fill="transparent" stroke="${color}" stroke-width="10" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/></svg>
                                 </div>
                                 <div class="space-y-2 w-full">
-                                    ${f.rows.map(r => `<div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full ${isPhaseDone ? 'bg-green-400' : 'bg-blue-400'}"></div><span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r[f.colAtiv]}</span></div>`).join('')}
+                                    ${f.rows.map(r => {
+                                        const p = parseFloat(r[f.colPerc]?.replace(',','.') || 0);
+                                        return `<div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full ${p >= 100 ? (isPhaseDone ? 'bg-green-400' : 'bg-blue-400') : 'bg-slate-200'}"></div><span class="text-[10px] text-slate-500 font-bold uppercase leading-tight">${r[f.colAtiv]}</span></div>`
+                                    }).join('')}
                                 </div>
                             </div>`;
                 } else {
                     html += `<div class="space-y-5">${f.rows.map(r => {
-                        const perc = parseFloat(r[f.colPerc] || 0);
+                        const perc = parseFloat(r[f.colPerc]?.replace(',','.') || 0);
                         let barColor = 'bg-slate-200';
                         if (isPhaseDone) barColor = 'bg-phase-done';
                         else if (perc >= 100) barColor = 'bg-obra-done';
